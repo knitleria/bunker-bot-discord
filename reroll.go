@@ -1,82 +1,101 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"strings"
 )
 
-func uniqueDraw(pool []string, n int) []string {
-	if len(pool) == 0 {
-		out := make([]string, n)
-		for i := range out {
-			out[i] = "-"
-		}
-		return out
+func uniqueDraw(pool []string, n int, rng *rand.Rand) ([]string, error) {
+	if n < 0 {
+		return nil, fmt.Errorf("draw count must not be negative")
 	}
-
-	out := make([]string, n)
+	if rng == nil {
+		return nil, fmt.Errorf("random source is required")
+	}
+	values, err := normalizePool(pool)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, n)
 	for len(out) < n {
-		for _, item := range rand.Perm(len(pool)) {
-			if len(out) >= n {
+		order := rng.Perm(len(values))
+		// Avoid equal neighbours at a cycle boundary. In particular, a fact
+		// pair straddling two cycles must still contain different values.
+		if len(values) > 1 && len(out) > 0 && values[order[0]] == out[len(out)-1] {
+			j := 1 + rng.Intn(len(order)-1)
+			order[0], order[j] = order[j], order[0]
+		}
+		for _, index := range order {
+			if len(out) == n {
 				break
 			}
-			out = append(out, pool[item])
+			out = append(out, values[index])
 		}
 	}
-	rand.Shuffle(len(out), func(i, j int) {
-		out[i], out[j] = out[j], out[i]
-	})
-	return out
+	return out, nil
 }
 
-func assignColumn(players []*Player, statKey string, pool []string) {
-	value := uniqueDraw(pool, len(players))
+func dealAll(players []*Player, pools map[string][]string, rng *rand.Rand) error {
+	return rerollGroup(players, "all", pools, rng)
+}
+
+func rerollGroup(players []*Player, group string, pools map[string][]string, rng *rand.Rand) error {
+	keys, ok := RerollGroups[group]
+	if group == "all" {
+		keys = AllStatKeys
+	} else if !ok {
+		return fmt.Errorf("unknown reroll group: %q", group)
+	}
+	if err := validatePlayers(players); err != nil {
+		return err
+	}
+	if rng == nil {
+		return fmt.Errorf("random source is required")
+	}
+
+	poolKeys := make([]string, 0, len(keys))
+	seen := make(map[string]bool)
+	for _, key := range keys {
+		pool := PoolForStat[key]
+		if !seen[pool] {
+			poolKeys = append(poolKeys, pool)
+			seen[pool] = true
+		}
+	}
+	normalized, err := normalizePools(pools, poolKeys)
+	if err != nil {
+		return err
+	}
+
+	// Prepare every draw before touching players, so invalid input cannot
+	// leave partially updated cards, even with the current Store.Update.
+	draws := make(map[string][]string, len(normalized))
+	for _, pool := range poolKeys {
+		n := len(players)
+		if pool == "facts" {
+			n *= 2
+		}
+		draws[pool], err = uniqueDraw(normalized[pool], n, rng)
+		if err != nil {
+			return err
+		}
+	}
 	for i, p := range players {
 		if p.Stats == nil {
-			p.Stats = map[string]string{}
+			p.Stats = make(map[string]string)
 		}
-		p.Stats[statKey] = value[i]
-	}
-}
-
-func assignFacts(players []*Player, pool []string) {
-	value := uniqueDraw(pool, len(players))
-	for i, p := range players {
-		if p.Stats == nil {
-			p.Stats = map[string]string{}
-		}
-		p.Stats[StatFact1] = value[i*2]
-		p.Stats[StatFact2] = value[i*2+1]
-	}
-}
-
-func dealAll(players []*Player, pools map[string][]string) {
-	assignColumn(players, StatGender, pools["gender"])
-	assignColumn(players, StatAge, pools["age"])
-	assignColumn(players, StatFertility, pools["fertility"])
-	assignColumn(players, StatHealth, pools["health"])
-	assignColumn(players, StatProfession, pools["profession"])
-	assignColumn(players, StatHobby, pools["hobby"])
-	assignColumn(players, StatBaggage, pools["baggage"])
-	assignFacts(players, pools["facts"])
-
-}
-
-func rerollGroup(players []*Player, group string, pools map[string][]string) {
-	switch group {
-	case "all":
-		dealAll(players, pools)
-	case "biology":
-		assignColumn(players, StatGender, pools["gender"])
-		assignColumn(players, StatAge, pools["age"])
-		assignColumn(players, StatFertility, pools["fertility"])
-	case "facts":
-		assignFacts(players, pools["facts"])
-	default:
-		for _, key := range RerollGroups[group] {
-			assignColumn(players, key, pools[PoolForStat[key]])
+		for _, key := range keys {
+			index := i
+			if key == StatFact1 {
+				index = 2 * i
+			} else if key == StatFact2 {
+				index = 2*i + 1
+			}
+			p.Stats[key] = draws[PoolForStat[key]][index]
 		}
 	}
+	return nil
 }
 
 func findPlayer(g *Game, nickname string) *Player {

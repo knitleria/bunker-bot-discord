@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -222,8 +224,7 @@ func (b *Bot) onGenerate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if len(g.Pools) == 0 {
 			return fmt.Errorf("no pools in the game")
 		}
-		dealAll(g.Players, g.Pools)
-		return nil
+		return dealAll(g.Players, g.Pools, rand.New(rand.NewSource(time.Now().UnixNano())))
 	}); err != nil {
 		respond(s, i, "Error: "+err.Error())
 		return
@@ -261,8 +262,7 @@ func (b *Bot) onRegenerate(s *discordgo.Session, i *discordgo.InteractionCreate)
 		if len(g.Pools) == 0 {
 			return fmt.Errorf("no pools in the game")
 		}
-		rerollGroup(g.Players, "all", g.Pools)
-		return nil
+		return rerollGroup(g.Players, "all", g.Pools, rand.New(rand.NewSource(time.Now().UnixNano())))
 	}); err != nil {
 	}
 

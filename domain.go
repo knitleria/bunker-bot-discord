@@ -40,9 +40,9 @@ var RerollGroups = map[string][]string{
 }
 
 var PoolForStat = map[string]string{
-	StatGender:     "biology",
-	StatAge:        "biology",
-	StatFertility:  "biology",
+	StatGender:     "gender",
+	StatAge:        "age",
+	StatFertility:  "fertility",
 	StatHealth:     "health",
 	StatProfession: "profession",
 	StatHobby:      "hobby",

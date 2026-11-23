@@ -10,7 +10,7 @@ import (
 
 type Game struct {
 	Players []*Player         `json:"players"`
-	Pools   map[string]string `json:"pools"`
+	Pools   map[string][]string `json:"pools"`
 	Started bool              `json:"started"`
 }
 
